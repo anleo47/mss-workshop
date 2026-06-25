@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>MSS Workshop Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <style>
   :root {
     --bg: #0f1419;
@@ -153,7 +156,11 @@
     font-size: 11px;
     font-weight: 600;
   }
-  .kanban-col-body { display: flex; flex-direction: column; gap: 8px; }
+  .kanban-col-body { display: flex; flex-direction: column; gap: 8px; min-height: 60px; border-radius: 6px; transition: background 0.12s; }
+  .kanban-col-body.drag-over { background: rgba(74,158,255,0.10); outline: 2px dashed var(--accent); outline-offset: -2px; }
+  .job-card.dragging { opacity: 0.4; }
+  .job-card[draggable="true"] { cursor: grab; }
+  .job-card[draggable="true"]:active { cursor: grabbing; }
 
   /* Cards */
   .job-card {
@@ -370,6 +377,118 @@
 
   .small-help { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 
+  /* Mechanic tag input */
+  .tag-input {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 8px;
+    align-items: center;
+  }
+  .tag-input:focus-within { border-color: var(--accent); }
+  .tag-input input {
+    flex: 1;
+    min-width: 120px;
+    background: transparent !important;
+    border: none !important;
+    padding: 2px !important;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+  }
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(74,158,255,0.18);
+    color: var(--accent);
+    border-radius: 12px;
+    padding: 3px 6px 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .tag-chip button {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .tag-chip button:hover { color: #fff; }
+
+  /* Attachments */
+  .attach-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .attach-item {
+    position: relative;
+    width: 84px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .attach-item a { text-decoration: none; color: var(--text); display: block; }
+  .attach-thumb {
+    width: 100%;
+    height: 64px;
+    object-fit: cover;
+    display: block;
+    background: var(--panel-2);
+  }
+  .attach-file {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    background: var(--panel-2);
+  }
+  .attach-name {
+    font-size: 10px;
+    padding: 3px 4px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .attach-del {
+    position: absolute;
+    top: 2px; right: 2px;
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .attach-del:hover { background: var(--danger); }
+  .attach-uploading { opacity: 0.55; }
+  .pill.attach { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+
+  .dates-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .dates-info strong { color: var(--text); font-weight: 600; }
+
+  /* flatpickr dark tweaks to match theme */
+  .flatpickr-calendar { background: var(--panel); border: 1px solid var(--border); }
+
   @media (max-width: 900px) {
     .kanban { grid-template-columns: 1fr; }
     .vehicles-grid { grid-template-columns: 1fr; }
@@ -463,17 +582,27 @@
       <div class="form-row form-row-2">
         <div>
           <label>Due Date</label>
-          <input type="date" id="job-due" />
+          <input type="text" id="job-due" placeholder="Pick a date" />
         </div>
         <div>
-          <label>Mechanic</label>
-          <input type="text" id="job-mechanic" placeholder="Assigned to" list="mechanics-list" />
-          <datalist id="mechanics-list"></datalist>
+          <label>imoto Ticket Ref</label>
+          <input type="text" id="job-imoto" placeholder="e.g. IMT-12345" />
         </div>
       </div>
       <div class="form-row">
-        <label>imoto Ticket Ref</label>
-        <input type="text" id="job-imoto" placeholder="e.g. IMT-12345" />
+        <label>Mechanics</label>
+        <div id="mechanic-tags" class="tag-input">
+          <input type="text" id="job-mechanic-input" placeholder="Type a name, Enter to add" list="mechanics-list" autocomplete="off" />
+        </div>
+        <datalist id="mechanics-list"></datalist>
+        <div class="small-help">Assign one or more. Press Enter or comma to add each name.</div>
+      </div>
+      <div class="form-row">
+        <label>Photos &amp; Files</label>
+        <div id="job-attachments" class="attach-grid"></div>
+        <input type="file" id="job-file-input" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" style="display:none" />
+        <button type="button" class="btn btn-secondary btn-sm" id="job-attach-btn">+ Add photos / files</button>
+        <div class="small-help" id="attach-help"></div>
       </div>
       <div class="form-row">
         <label>Parts Needed</label>
@@ -482,6 +611,13 @@
       <div class="form-row">
         <label>Notes</label>
         <textarea id="job-notes" placeholder="Additional details..."></textarea>
+      </div>
+      <div class="form-row" id="job-dates-info" style="display:none">
+        <label>Record</label>
+        <div class="dates-info">
+          <span id="job-opened-info"></span>
+          <span id="job-completed-info"></span>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -611,6 +747,16 @@ const STATUSES = [
 
 const URGENCIES = { low: 'Low', medium: 'Med', high: 'High', critical: 'Critical' };
 
+const ATTACH_BUCKET = 'job-attachments';
+
+// Working state for the job modal (mechanics tags + attachments)
+state.jobMechanics = [];
+state.jobAttachments = [];
+state.jobDraftId = null;
+state.jobSaved = false;
+state.dragging = null;
+let duePicker = null;
+
 // ====== Storage (offline fallback) ======
 function loadLocal() {
   const s = localStorage.getItem('mss_state_' + state.config.workshopId);
@@ -735,6 +881,21 @@ function fmtDate(d) {
   const date = new Date(d);
   return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
 }
+function fmtDateTime(d) {
+  if (!d) return '';
+  const date = new Date(d);
+  return date.toLocaleString('en-AU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+// Mechanics are stored comma-separated in the existing `mechanic` text column
+function mechanicsArray(j) {
+  if (!j || !j.mechanic) return [];
+  return String(j.mechanic).split(',').map(s => s.trim()).filter(Boolean);
+}
+function attachmentsArray(j) {
+  if (!j || !j.attachments) return [];
+  if (Array.isArray(j.attachments)) return j.attachments;
+  try { return JSON.parse(j.attachments) || []; } catch(e) { return []; }
+}
 
 // ====== Render ======
 function render() {
@@ -742,7 +903,7 @@ function render() {
   document.getElementById('setup-banner').style.display = state.supabase ? 'none' : 'block';
 
   // Update mechanic filter dropdown
-  const mechanics = [...new Set(state.jobs.map(j => j.mechanic).filter(Boolean))].sort();
+  const mechanics = [...new Set(state.jobs.flatMap(j => mechanicsArray(j)))].sort();
   const mFilter = document.getElementById('filter-mechanic');
   const currentMech = mFilter.value;
   mFilter.innerHTML = '<option value="">All mechanics</option>' +
@@ -762,7 +923,7 @@ function render() {
   // Filter jobs
   const filteredJobs = state.jobs.filter(j => {
     if (state.filters.showDone === 'hide' && j.status === 'done') return false;
-    if (state.filters.mechanic && j.mechanic !== state.filters.mechanic) return false;
+    if (state.filters.mechanic && !mechanicsArray(j).includes(state.filters.mechanic)) return false;
     if (state.filters.urgency) {
       const levels = { critical: 4, high: 3, medium: 2, low: 1 };
       if (levels[j.urgency] < levels[state.filters.urgency]) return false;
@@ -802,29 +963,72 @@ function renderKanban(jobs) {
           <div class="kanban-col-title">${s.label}</div>
           <div class="col-count">${colJobs.length}</div>
         </div>
-        <div class="kanban-col-body">
+        <div class="kanban-col-body" data-status="${s.key}">
           ${colJobs.map(j => jobCardHtml(j)).join('') || '<div class="vehicle-empty">No jobs</div>'}
         </div>
       </div>
     `;
   }).join('');
   view.querySelectorAll('.job-card').forEach(el => {
-    el.addEventListener('click', () => openJobModal(el.dataset.id));
+    el.addEventListener('click', () => { if (!state.dragging) openJobModal(el.dataset.id); });
+    el.addEventListener('dragstart', (e) => {
+      state.dragging = el.dataset.id;
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', el.dataset.id);
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('dragging');
+      setTimeout(() => { state.dragging = null; }, 50);
+    });
   });
+  view.querySelectorAll('.kanban-col-body').forEach(body => {
+    body.addEventListener('dragover', (e) => { e.preventDefault(); body.classList.add('drag-over'); });
+    body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+    body.addEventListener('drop', (e) => {
+      e.preventDefault();
+      body.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain') || state.dragging;
+      const newStatus = body.dataset.status;
+      moveJobToStatus(id, newStatus);
+    });
+  });
+}
+
+async function moveJobToStatus(id, newStatus) {
+  const j = state.jobs.find(x => x.id === id);
+  if (!j || !newStatus || j.status === newStatus) return;
+  applyStatusChange(j, newStatus);
+  j.updated_at = new Date().toISOString();
+  await saveJob(j);
+  render();
+}
+
+// Set/clear completed_at when a job enters/leaves the 'done' status
+function applyStatusChange(j, newStatus) {
+  if (newStatus === 'done' && j.status !== 'done') {
+    j.completed_at = j.completed_at || new Date().toISOString();
+  } else if (newStatus !== 'done') {
+    j.completed_at = null;
+  }
+  j.status = newStatus;
 }
 
 function jobCardHtml(j) {
   const c = state.containers.find(c => c.id === j.container_id);
   const overdue = isOverdue(j.due_date, j.status);
   const urgencyShow = ['high','critical'].includes(j.urgency);
+  const mechs = mechanicsArray(j);
+  const attachCount = attachmentsArray(j).length;
   return `
-    <div class="job-card urgency-${j.urgency}" data-id="${j.id}">
+    <div class="job-card urgency-${j.urgency}" data-id="${j.id}" draggable="true">
       <div class="job-container">${escapeHtml(containerLabel(c))}</div>
       <div class="job-title">${escapeHtml(j.title)}</div>
       <div class="job-meta">
         ${urgencyShow ? `<span class="pill urgency-${j.urgency}">${URGENCIES[j.urgency]}</span>` : ''}
         ${j.due_date ? `<span class="pill ${overdue?'overdue':''}">📅 ${fmtDate(j.due_date)}${overdue?' OVERDUE':''}</span>` : ''}
-        ${j.mechanic ? `<span class="pill mechanic">👤 ${escapeHtml(j.mechanic)}</span>` : ''}
+        ${mechs.map(m => `<span class="pill mechanic">👤 ${escapeHtml(m)}</span>`).join('')}
+        ${attachCount ? `<span class="pill attach">📎 ${attachCount}</span>` : ''}
         ${j.imoto_ref ? `<span class="pill imoto">🎫 ${escapeHtml(j.imoto_ref)}</span>` : ''}
       </div>
     </div>
@@ -867,7 +1071,8 @@ function renderVehicles(jobs) {
                 <div class="status-dot status-${j.status}" title="${STATUSES.find(s=>s.key===j.status)?.label||''}"></div>
                 <div class="vehicle-job-title">${escapeHtml(j.title)}</div>
                 ${j.due_date ? `<span class="pill ${overdue?'overdue':''}" style="font-size:10px">${fmtDate(j.due_date)}</span>` : ''}
-                ${j.mechanic ? `<span class="pill mechanic" style="font-size:10px">${escapeHtml(j.mechanic)}</span>` : ''}
+                ${mechanicsArray(j).map(m => `<span class="pill mechanic" style="font-size:10px">${escapeHtml(m)}</span>`).join('')}
+                ${attachmentsArray(j).length ? `<span class="pill attach" style="font-size:10px">📎 ${attachmentsArray(j).length}</span>` : ''}
               </div>
             `;
           }).join('') || '<div class="vehicle-empty">No active jobs</div>'}
@@ -965,6 +1170,112 @@ async function deleteContainer() {
   render();
 }
 
+// ====== Mechanic tags ======
+function renderMechanicTags() {
+  const container = document.getElementById('mechanic-tags');
+  const input = document.getElementById('job-mechanic-input');
+  // remove existing chips (keep the input element)
+  container.querySelectorAll('.tag-chip').forEach(el => el.remove());
+  state.jobMechanics.forEach((m, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${escapeHtml(m)} <button type="button" title="Remove" data-i="${i}">✕</button>`;
+    chip.querySelector('button').addEventListener('click', () => {
+      state.jobMechanics.splice(i, 1);
+      renderMechanicTags();
+    });
+    container.insertBefore(chip, input);
+  });
+}
+function addMechanicFromInput() {
+  const input = document.getElementById('job-mechanic-input');
+  const raw = input.value.trim().replace(/,$/, '').trim();
+  if (!raw) { input.value = ''; return; }
+  // allow pasting "a, b, c"
+  raw.split(',').map(s => s.trim()).filter(Boolean).forEach(name => {
+    if (!state.jobMechanics.some(m => m.toLowerCase() === name.toLowerCase())) {
+      state.jobMechanics.push(name);
+    }
+  });
+  input.value = '';
+  renderMechanicTags();
+}
+
+// ====== Attachments ======
+function renderAttachments() {
+  const grid = document.getElementById('job-attachments');
+  grid.innerHTML = state.jobAttachments.map((a, i) => {
+    const isImg = (a.type || '').startsWith('image/');
+    const inner = isImg
+      ? `<img class="attach-thumb" src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name)}" />`
+      : `<div class="attach-file">📄</div>`;
+    return `
+      <div class="attach-item ${a.uploading ? 'attach-uploading' : ''}" data-i="${i}">
+        ${a.uploading ? '' : `<button type="button" class="attach-del" data-i="${i}" title="Remove">✕</button>`}
+        <a href="${escapeHtml(a.url || '#')}" target="_blank" rel="noopener">
+          ${inner}
+          <div class="attach-name" title="${escapeHtml(a.name)}">${a.uploading ? 'Uploading…' : escapeHtml(a.name)}</div>
+        </a>
+      </div>`;
+  }).join('');
+  grid.querySelectorAll('.attach-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      removeAttachment(parseInt(btn.dataset.i, 10));
+    });
+  });
+}
+
+function updateAttachHelp() {
+  const help = document.getElementById('attach-help');
+  const btn = document.getElementById('job-attach-btn');
+  if (!state.supabase) {
+    help.textContent = 'Connect Supabase (Settings) to upload and sync files.';
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+  } else {
+    help.textContent = 'Stored in Supabase Storage and synced to all devices.';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+}
+
+async function handleFilesSelected(fileList) {
+  if (!state.supabase) { alert('Connect Supabase in Settings before uploading files.'); return; }
+  const files = Array.from(fileList);
+  for (const file of files) {
+    const placeholder = { name: file.name, type: file.type, size: file.size, uploading: true, url: '' };
+    state.jobAttachments.push(placeholder);
+    renderAttachments();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${state.config.workshopId}/${state.jobDraftId}/${uuid()}-${safeName}`;
+    try {
+      const { error } = await state.supabase.storage.from(ATTACH_BUCKET)
+        .upload(path, file, { cacheControl: '3600', upsert: false });
+      if (error) throw error;
+      const { data: pub } = state.supabase.storage.from(ATTACH_BUCKET).getPublicUrl(path);
+      Object.assign(placeholder, { path, url: pub.publicUrl, uploading: false });
+    } catch (err) {
+      console.error('Upload failed', err);
+      alert('Upload failed for "' + file.name + '": ' + (err.message || err));
+      const idx = state.jobAttachments.indexOf(placeholder);
+      if (idx > -1) state.jobAttachments.splice(idx, 1);
+    }
+    renderAttachments();
+  }
+}
+
+async function removeAttachment(i) {
+  const a = state.jobAttachments[i];
+  if (!a) return;
+  state.jobAttachments.splice(i, 1);
+  renderAttachments();
+  if (a.path && state.supabase) {
+    try { await state.supabase.storage.from(ATTACH_BUCKET).remove([a.path]); }
+    catch (err) { console.error('Could not delete file from storage', err); }
+  }
+}
+
 function openJobModal(jobId, preselectContainerId) {
   state.editingJobId = jobId || null;
   const m = document.getElementById('job-modal');
@@ -984,35 +1295,77 @@ function openJobModal(jobId, preselectContainerId) {
   }
   sel.innerHTML = opts || '<option value="">⚠ Add a vehicle or ad-hoc category first</option>';
 
+  const datesInfo = document.getElementById('job-dates-info');
+  document.getElementById('job-mechanic-input').value = '';
+
   if (jobId) {
     const j = state.jobs.find(x => x.id === jobId);
+    state.jobDraftId = jobId;
     title.textContent = 'Edit Job';
     sel.value = j.container_id;
     document.getElementById('job-title').value = j.title || '';
     document.getElementById('job-urgency').value = j.urgency || 'medium';
     document.getElementById('job-status').value = j.status || 'todo';
-    document.getElementById('job-due').value = j.due_date || '';
-    document.getElementById('job-mechanic').value = j.mechanic || '';
+    setDueValue(j.due_date || '');
+    state.jobMechanics = mechanicsArray(j);
+    state.jobAttachments = attachmentsArray(j).map(a => ({ ...a }));
     document.getElementById('job-imoto').value = j.imoto_ref || '';
     document.getElementById('job-parts').value = j.parts_needed || '';
     document.getElementById('job-notes').value = j.notes || '';
     delBtn.style.display = 'inline-block';
+    // Opened / completed record
+    datesInfo.style.display = 'block';
+    document.getElementById('job-opened-info').innerHTML =
+      j.created_at ? `<strong>Opened:</strong> ${fmtDateTime(j.created_at)}` : '<strong>Opened:</strong> —';
+    document.getElementById('job-completed-info').innerHTML =
+      j.completed_at ? `<strong>Completed:</strong> ${fmtDateTime(j.completed_at)}` : '';
   } else {
+    state.jobDraftId = uuid();
     title.textContent = 'New Job';
     if (preselectContainerId) sel.value = preselectContainerId;
     document.getElementById('job-title').value = '';
     document.getElementById('job-urgency').value = 'medium';
     document.getElementById('job-status').value = 'todo';
-    document.getElementById('job-due').value = '';
-    document.getElementById('job-mechanic').value = '';
+    setDueValue('');
+    state.jobMechanics = [];
+    state.jobAttachments = [];
     document.getElementById('job-imoto').value = '';
     document.getElementById('job-parts').value = '';
     document.getElementById('job-notes').value = '';
     delBtn.style.display = 'none';
+    datesInfo.style.display = 'none';
   }
+  renderMechanicTags();
+  renderAttachments();
+  updateAttachHelp();
   m.classList.add('active');
 }
-function closeJobModal() { document.getElementById('job-modal').classList.remove('active'); }
+
+// Set the due date value via flatpickr if available, else the raw input
+function setDueValue(val) {
+  const input = document.getElementById('job-due');
+  if (duePicker) {
+    if (val) duePicker.setDate(val, false); else duePicker.clear();
+  } else {
+    input.value = val || '';
+  }
+}
+function getDueValue() {
+  return document.getElementById('job-due').value || null;
+}
+function closeJobModal() {
+  // If a brand-new job is cancelled, remove any files already uploaded for it
+  if (!state.editingJobId && !state.jobSaved) {
+    const toRemove = state.jobAttachments.filter(a => a.path).map(a => a.path);
+    if (toRemove.length && state.supabase) {
+      state.supabase.storage.from(ATTACH_BUCKET).remove(toRemove).catch(e => console.error(e));
+    }
+  }
+  state.jobMechanics = [];
+  state.jobAttachments = [];
+  state.jobSaved = false;
+  document.getElementById('job-modal').classList.remove('active');
+}
 
 async function saveJobFromModal() {
   const containerId = document.getElementById('job-container').value;
@@ -1020,24 +1373,31 @@ async function saveJobFromModal() {
   if (!containerId) { alert('Add a vehicle or ad-hoc category first'); return; }
   if (!title) { alert('Job title is required'); return; }
 
+  // Flush any name still typed in the mechanic box
+  addMechanicFromInput();
+
   let j;
   if (state.editingJobId) {
     j = state.jobs.find(x => x.id === state.editingJobId);
   } else {
-    j = { id: uuid(), created_at: new Date().toISOString() };
+    j = { id: state.jobDraftId || uuid(), created_at: new Date().toISOString() };
     state.jobs.push(j);
   }
   j.container_id = containerId;
   j.title = title;
   j.urgency = document.getElementById('job-urgency').value;
-  j.status = document.getElementById('job-status').value;
-  j.due_date = document.getElementById('job-due').value || null;
-  j.mechanic = document.getElementById('job-mechanic').value.trim() || null;
+  applyStatusChange(j, document.getElementById('job-status').value);
+  j.due_date = getDueValue();
+  j.mechanic = state.jobMechanics.join(', ') || null;
   j.imoto_ref = document.getElementById('job-imoto').value.trim() || null;
   j.parts_needed = document.getElementById('job-parts').value.trim() || null;
   j.notes = document.getElementById('job-notes').value.trim() || null;
+  j.attachments = state.jobAttachments
+    .filter(a => !a.uploading)
+    .map(a => ({ name: a.name, path: a.path, url: a.url, type: a.type, size: a.size }));
   j.updated_at = new Date().toISOString();
 
+  state.jobSaved = true;
   await saveJob(j);
   closeJobModal();
   render();
@@ -1046,8 +1406,15 @@ async function saveJobFromModal() {
 async function deleteJob() {
   if (!state.editingJobId) return;
   if (!confirm('Delete this job?')) return;
-  state.jobs = state.jobs.filter(j => j.id !== state.editingJobId);
+  const j = state.jobs.find(x => x.id === state.editingJobId);
+  const paths = attachmentsArray(j).filter(a => a.path).map(a => a.path);
+  state.jobs = state.jobs.filter(x => x.id !== state.editingJobId);
   await deleteJobRemote(state.editingJobId);
+  if (paths.length && state.supabase) {
+    try { await state.supabase.storage.from(ATTACH_BUCKET).remove(paths); }
+    catch (e) { console.error('Could not delete attachments', e); }
+  }
+  state.jobSaved = true;
   closeJobModal();
   render();
 }
@@ -1111,6 +1478,35 @@ document.getElementById('job-save-btn').onclick = saveJobFromModal;
 document.getElementById('job-delete-btn').onclick = deleteJob;
 document.getElementById('settings-save-btn').onclick = saveSettings;
 document.getElementById('settings-disconnect-btn').onclick = disconnectSupabase;
+
+// Mechanic tag input
+const mechInput = document.getElementById('job-mechanic-input');
+mechInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addMechanicFromInput(); }
+  else if (e.key === 'Backspace' && !mechInput.value && state.jobMechanics.length) {
+    state.jobMechanics.pop(); renderMechanicTags();
+  }
+});
+mechInput.addEventListener('blur', addMechanicFromInput);
+
+// Attachments
+document.getElementById('job-attach-btn').onclick = () => document.getElementById('job-file-input').click();
+document.getElementById('job-file-input').addEventListener('change', (e) => {
+  handleFilesSelected(e.target.files);
+  e.target.value = '';
+});
+
+// Date picker (flatpickr) with graceful fallback to a native date input
+if (window.flatpickr) {
+  duePicker = flatpickr('#job-due', {
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: 'D, d M Y',
+    allowInput: true
+  });
+} else {
+  document.getElementById('job-due').type = 'date';
+}
 
 document.getElementById('search-input').oninput = (e) => { state.filters.search = e.target.value; render(); };
 document.getElementById('filter-mechanic').onchange = (e) => { state.filters.mechanic = e.target.value; render(); };
